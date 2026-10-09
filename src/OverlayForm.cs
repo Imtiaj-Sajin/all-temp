@@ -80,7 +80,8 @@ sealed class OverlayForm : Form
         CreateFonts();
         _menu = BuildMenu();
         ContextMenuStrip = _menu;
-        _tray = new NotifyIcon { Text = "AllTemp", Icon = SystemIcons.Application, ContextMenuStrip = _menu, Visible = true };
+        Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application;
+        _tray = new NotifyIcon { Text = "AllTemp", Icon = Icon, ContextMenuStrip = _menu, Visible = true };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ToggleVisible(); };
 
         _sensors.IntervalMs = _settings.IntervalMs;
@@ -130,7 +131,8 @@ sealed class OverlayForm : Form
     void StartSensors()
     {
         bool install = false;
-        if (Elevation.IsAdmin && !Elevation.PawnIoInstalled && DriverSetup.Bundled && !_settings.DriverPromptShown)
+        if (Elevation.IsAdmin && !Elevation.PawnIoInstalled && DriverSetup.Bundled && !_settings.DriverPromptShown
+            && !DriverSetup.DeclinedInInstaller)
         {
             _settings.DriverPromptShown = true; // ask once; the window and menu keep an install link afterwards
             _settings.Save();

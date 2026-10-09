@@ -11,6 +11,10 @@
     <Version>0.1.0</Version>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\AllTemp.ico</ApplicationIcon>
+    <Product>AllTemp</Product>
+    <Company>Imtiaj Sajin</Company>
+    <Description>AllTemp - all temperatures in one overlay</Description>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
