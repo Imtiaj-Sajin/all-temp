@@ -41,6 +41,7 @@ sealed class SensorService : IDisposable
     volatile bool _stopping;
     volatile int _intervalMs = 1000;
     Dictionary<int, string> _diskLetters = new();
+    int _polls;
 
     public event Action<IReadOnlyList<DeviceReading>>? Updated;
 
@@ -103,22 +104,29 @@ sealed class SensorService : IDisposable
     IReadOnlyList<DeviceReading> Poll()
     {
         var devices = new List<DeviceReading>();
+        // Some hardware (Super I/O chips, DIMMs) only activates its sensors during Update(), so poll
+        // everything for the first few rounds before skipping hardware that has no temperatures at all.
+        bool discovering = _polls++ < 5;
         foreach (var hw in _computer.Hardware)
         {
-            if (!HasTempSensor(hw)) continue; // e.g. network adapters, "Virtual Memory": nothing to show, so don't poll
+            if (!discovering && !HasTempSensor(hw)) continue; // e.g. "Virtual Memory": nothing to show
             UpdateTree(hw);
             var sensors = new List<SensorReading>();
             CollectTemps(hw, sensors);
             if (sensors.Count == 0) continue;
 
             var kind = KindOf(hw.HardwareType);
+            var primary = PickPrimary(kind, sensors);
+            sensors.Remove(primary);
+            sensors.Insert(0, primary); // primary first when a row is expanded
+            var labeled = sensors.ConvertAll(r => r with { Name = Label(kind, r.Name) });
             devices.Add(new DeviceReading(
                 hw.Identifier.ToString(),
                 kind,
                 CleanName(hw.Name),
                 kind == DeviceKind.Storage ? LettersFor(hw) : null,
-                PickPrimary(kind, sensors),
-                sensors));
+                labeled[0],
+                labeled));
         }
 
         devices.Sort((a, b) => a.Kind != b.Kind
@@ -168,6 +176,7 @@ sealed class SensorService : IDisposable
             DeviceKind.Cpu => ["CPU Package", "Core (Tctl/Tdie)", "Core (Tctl)", "Core (Tdie)", "Core Max"],
             DeviceKind.Gpu => ["GPU Core"],
             DeviceKind.Storage => ["Composite Temperature", "Temperature", "Temperature 1"],
+            DeviceKind.Motherboard => ["Motherboard", "System", "Mainboard", "VRM MOS", "PCH", "Chipset"],
             _ => [],
         };
         foreach (var name in preferred)
@@ -175,7 +184,19 @@ sealed class SensorService : IDisposable
             var hit = sensors.Find(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             if (hit != null) return hit;
         }
-        return kind == DeviceKind.Storage ? sensors[0] : sensors.MaxBy(s => s.Value)!;
+        if (kind == DeviceKind.Storage) return sensors[0];
+        // The board's "CPU" input just repeats the CPU row, so prefer anything else.
+        return sensors.Where(s => !s.Name.Contains("CPU", StringComparison.OrdinalIgnoreCase)).MaxBy(s => s.Value)
+            ?? sensors.MaxBy(s => s.Value)!;
+    }
+
+    /// <summary>Friendlier sensor names for the expanded rows.</summary>
+    static string Label(DeviceKind kind, string name)
+    {
+        if (kind != DeviceKind.Storage) return name;
+        if (name.Equals("Composite Temperature", StringComparison.OrdinalIgnoreCase)) return "Composite";
+        if (name.Equals("Temperature", StringComparison.OrdinalIgnoreCase)) return "Drive";
+        return name.StartsWith("Temperature #", StringComparison.OrdinalIgnoreCase) ? "Sensor " + name[13..] : name;
     }
 
     string? LettersFor(IHardware hw)
