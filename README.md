@@ -6,7 +6,7 @@ A small Windows overlay that shows every temperature sensor on the machine in on
 - Green / amber / red per device type, e.g. CPU 70 / 85 °C, GPU core 75 / 85 °C, GPU hot spot 85 / 100 °C, NVMe 60 / 70 °C (or the drive's own warning temperature if lower; controller sensors 70 / 80), SATA SSD 55 / 70 °C, hard drive 45 / 55 °C.
 - Disks are labelled with their drive letters.
 - **Pin** (📌): always on top, header hidden, adjustable transparency; hover to get the unpin button. Optional click-through.
-- **Show** temperatures, usage, or both (right-click → Show): CPU load and clock, GPU load and VRAM, RAM used/total, disk activity and transfer rate. "Both" adds a usage column.
+- **Show** temperatures, usage, or both (right-click → Show): CPU load and clock, GPU load and VRAM, RAM used/total, disk activity and transfer rate. "Both" adds a usage column. In single-view mode, click **Temperatures | Usage** in the header to flip instantly (when pinned, hover for the ⇄ button). The window sizes itself so names and figures are never cut off.
 - Tray icon shows the live CPU temperature (or CPU load in usage mode); tooltip lists every device.
 - Right-click the window or tray icon for options: opacity, click-through, °F, refresh rate, graphs, start with Windows.
 - ~35–40 MB RAM, ~0.2 % CPU at 1 s refresh.

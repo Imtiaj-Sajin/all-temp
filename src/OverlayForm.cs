@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace AllTemp;
 
@@ -31,8 +32,9 @@ sealed class OverlayForm : Form
     const TextFormatFlags TfLeft = TextFormatFlags.NoPrefix | TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
     const TextFormatFlags TfRight = TextFormatFlags.NoPrefix | TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
     const TextFormatFlags TfCenter = TextFormatFlags.NoPrefix | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+    const TextFormatFlags TfMeasure = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine; // no ellipsis, or text measures as "…"
 
-    enum ItemKind { Title, Button, Device, Sensor, Notice, Message }
+    enum ItemKind { Title, Button, Segment, Device, Sensor, Notice, Message }
 
     sealed class Item
     {
@@ -44,6 +46,7 @@ sealed class OverlayForm : Form
         public Action? Click;
         public bool HoverOnly;
         public bool DividerAbove;
+        public ViewMode Mode; // Segment: the view it switches to
     }
 
     readonly Settings _settings = Settings.Load();
@@ -59,6 +62,7 @@ sealed class OverlayForm : Form
     bool _mouseInside, _mouseDown, _started, _exiting, _firstShow = true, _toldAboutTray, _installingDriver;
     bool? _autostart;
     long _deactivatedAt;
+    int _usageW; // width of the usage column, sized for the widest possible value so it doesn't jitter
     Point _downPos;
     string _trayKey = "";
     Icon? _trayIcon;
@@ -234,18 +238,17 @@ sealed class OverlayForm : Form
     void RebuildLayout()
     {
         _items.Clear();
-        int w = Px(_settings.View switch { ViewMode.Both => 450, ViewMode.Usage => 400, _ => 360 }), y;
+        var visible = VisibleDevices.ToList();
+        int w = ContentWidth(visible), y;
         bool pinned = _settings.Pinned;
 
         if (!pinned)
         {
             int h = Px(40), bs = Px(30), by = (h - bs) / 2, bx = w - Px(6) - bs;
-            _items.Add(new Item { Kind = ItemKind.Title, Bounds = new(0, 0, w, h), Text = _settings.View switch
-            {
-                ViewMode.Usage => "Usage",
-                ViewMode.Both => "Temperatures & usage",
-                _ => "Temperatures",
-            } });
+            if (_settings.View == ViewMode.Both)
+                _items.Add(new Item { Kind = ItemKind.Title, Bounds = new(0, 0, w, h), Text = "Temperatures & usage" });
+            else
+                AddViewSwitch(Px(10), (h - Px(26)) / 2, Px(26));
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(bx, by, bs, bs), Text = "", Click = HideToTray });
             bx -= bs + Px(2);
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(bx, by, bs, bs), Text = "", Click = TogglePin });
@@ -255,7 +258,6 @@ sealed class OverlayForm : Form
         }
         else y = Px(4);
 
-        var visible = VisibleDevices.ToList();
         if (visible.Count == 0)
         {
             var msg = _devices is not null ? "No sensors found."
@@ -305,7 +307,9 @@ sealed class OverlayForm : Form
         }
         else
         {
-            // Unpin control floats over the top-right corner and only appears on hover.
+            // Unpin (and the temperature/usage toggle) float over the top-right corner and only appear on hover.
+            if (_settings.View != ViewMode.Both)
+                _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(64), Px(4), Px(28), Px(28)), Text = "\uE8AB", Click = ToggleView, HoverOnly = true });
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(32), Px(4), Px(28), Px(28)), Text = "", Click = TogglePin, HoverOnly = true });
         }
 
@@ -314,14 +318,79 @@ sealed class OverlayForm : Form
         if (ClientSize != size)
         {
             var wa = Screen.FromRectangle(Bounds).WorkingArea;
-            bool growUp = Top + Height / 2 > wa.Top + wa.Height / 2; // near the bottom: keep the bottom edge fixed
-            int bottom = Bottom;
+            bool growUp = Top + Height / 2 > wa.Top + wa.Height / 2;     // near the bottom: keep the bottom edge fixed
+            bool growLeft = Left + Width / 2 > wa.Left + wa.Width / 2;   // near the right: keep the right edge fixed
+            int bottom = Bottom, right = Right;
             ClientSize = size;
             if (growUp) Top = bottom - Height;
+            if (growLeft) Left = right - Width;
             Top = Math.Max(wa.Top, Math.Min(Top, wa.Bottom - Height));
+            Left = Math.Max(wa.Left, Math.Min(Left, wa.Right - Width));
         }
         _hot = _mouseInside ? HitTest(PointToClient(MousePosition)) : null;
         if (Visible) Invalidate();
+    }
+
+    /// <summary>[ Temperatures | Usage ] in the header: one click switches the view.</summary>
+    void AddViewSwitch(int x, int y, int h)
+    {
+        foreach (var (mode, label) in new[] { (ViewMode.Temps, "Temperatures"), (ViewMode.Usage, "Usage") })
+        {
+            int sw = TextRenderer.MeasureText(label, _fSubValue, Size.Empty, TfMeasure).Width + Px(24);
+            bool selected = _settings.View == mode;
+            _items.Add(new Item
+            {
+                Kind = ItemKind.Segment,
+                Bounds = new(x, y, sw, h),
+                Text = label,
+                Mode = mode,
+                Click = selected ? null : () => SetView(mode),
+            });
+            x += sw + Px(2);
+        }
+    }
+
+    void ToggleView() => SetView(_settings.View == ViewMode.Temps ? ViewMode.Usage : ViewMode.Temps);
+
+    void SetView(ViewMode mode)
+    {
+        _settings.View = mode;
+        _settings.Save();
+        _trayKey = "";
+        RebuildLayout();
+        UpdateTray();
+    }
+
+    /// <summary>
+    /// Window width that fits the longest device name and the widest possible usage text, so nothing is
+    /// truncated and the width doesn't change as the numbers do. Mirrors the column layout in DrawDevice.
+    /// </summary>
+    int ContentWidth(List<DeviceReading> visible)
+    {
+        int nameW = 0;
+        _usageW = 0;
+        foreach (var d in visible)
+        {
+            int n = TextRenderer.MeasureText(d.Name, _fName, Size.Empty, TfMeasure).Width;
+            if (d.Detail != null) n += TextRenderer.MeasureText(d.Detail, _fSubValue, Size.Empty, TfMeasure).Width + Px(6);
+            nameW = Math.Max(nameW, n);
+            if (ShowsUsage && d.Usage != null)
+                _usageW = Math.Max(_usageW, TextRenderer.MeasureText(UsageTemplate(d), _fSub, Size.Empty, TfMeasure).Width);
+        }
+        nameW = Math.Min(nameW + Px(4), Px(320));
+        int w = Px(72) + nameW
+            + (_settings.ShowGraphs ? Px(64) : 0)
+            + (ShowsUsage ? _usageW + Px(14) : Px(6))
+            + Px(56 + 14);
+        return Math.Clamp(w, Px(360), Px(960));
+    }
+
+    /// <summary>Widest form of a device's usage text: every digit as "8", disks at a 3-digit MB/s rate.</summary>
+    string UsageTemplate(DeviceReading d)
+    {
+        var detail = d.Kind == DeviceKind.Storage ? "999.9 MB/s" : Regex.Replace(d.Usage!.Detail, @"\d", "8");
+        if (_settings.View == ViewMode.Usage) return detail;
+        return detail == "" ? "100%" : "100% · " + detail;
     }
 
     void PlaceWindow()
@@ -361,6 +430,11 @@ sealed class OverlayForm : Form
                     break;
                 case ItemKind.Button:
                     DrawButton(g, it);
+                    break;
+                case ItemKind.Segment:
+                    bool selected = it.Mode == _settings.View;
+                    FillRound(g, it.Bounds, Px(5), selected ? Color.FromArgb(64, 64, 68) : it == _hot ? BgHover : Color.FromArgb(40, 40, 40));
+                    TextRenderer.DrawText(g, it.Text, _fSubValue, it.Bounds, selected ? TextPrimary : TextSecondary, TfCenter);
                     break;
                 case ItemKind.Device:
                     DrawDevice(g, it);
@@ -437,7 +511,7 @@ sealed class OverlayForm : Form
         int nameRight = valueRect.Left - Px(6);
         if (usageText != null)
         {
-            int uw = Px(usageOnly ? 88 : 128);
+            int uw = _usageW;
             var usageRect = new Rectangle(valueRect.Left - Px(8) - uw, r.Top, uw, r.Height);
             TextRenderer.DrawText(g, usageText, _fSub, usageRect, usageOnly ? TextSecondary : TextPrimary, TfRight | TextFormatFlags.EndEllipsis);
             nameRight = usageRect.Left - Px(6);
@@ -795,14 +869,7 @@ sealed class OverlayForm : Form
         });
         var view = new ToolStripMenuItem("Show");
         foreach (var (mode, label) in new[] { (ViewMode.Temps, "Temperatures"), (ViewMode.Usage, "Usage (load, clocks, memory)"), (ViewMode.Both, "Temperatures + usage") })
-            view.DropDownItems.Add(new ToolStripMenuItem(label, null, (_, _) =>
-            {
-                _settings.View = mode;
-                _settings.Save();
-                _trayKey = "";
-                RebuildLayout();
-                UpdateTray();
-            }) { Tag = mode });
+            view.DropDownItems.Add(new ToolStripMenuItem(label, null, (_, _) => SetView(mode)) { Tag = mode });
         var interval = new ToolStripMenuItem("Refresh every");
         foreach (var ms in new[] { 500, 1000, 2000, 5000 })
             interval.DropDownItems.Add(new ToolStripMenuItem(ms < 1000 ? $"{ms / 1000.0:0.#} s" : $"{ms / 1000} s", null, (_, _) =>
