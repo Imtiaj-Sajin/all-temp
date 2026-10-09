@@ -50,7 +50,8 @@ Root: HKCU; Subkey: "Software\AllTemp"; ValueType: none; ValueName: "DriverDecli
 Filename: "{tmp}\windowsdesktop-runtime.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft .NET 8 Desktop Runtime..."; Check: not DotNetDesktop8Installed; Flags: waituntilterminated
 Filename: "{tmp}\PawnIO_setup.exe"; Parameters: "-install -silent"; StatusMsg: "Installing the PawnIO sensor driver..."; Tasks: driver; Flags: runhidden waituntilterminated
 Filename: "{app}\AllTemp.exe"; Parameters: "--autostart on"; StatusMsg: "Setting up start with Windows..."; Tasks: autostart; Flags: runhidden waituntilterminated
-Filename: "{app}\AllTemp.exe"; Description: "Launch AllTemp"; Flags: nowait postinstall skipifsilent
+; postinstall entries default to the original (non-admin) user, which can't start a requireAdministrator exe (error 740).
+Filename: "{app}\AllTemp.exe"; Description: "Launch AllTemp"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im AllTemp.exe"; Flags: runhidden waituntilterminated; RunOnceId: "StopApp"
