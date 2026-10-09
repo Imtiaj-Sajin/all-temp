@@ -34,7 +34,7 @@ sealed class OverlayForm : Form
     const TextFormatFlags TfCenter = TextFormatFlags.NoPrefix | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
     const TextFormatFlags TfMeasure = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine; // no ellipsis, or text measures as "…"
 
-    enum ItemKind { Title, Button, Segment, Device, Sensor, Notice, Message }
+    enum ItemKind { Button, Segment, Device, Sensor, Notice, Message }
 
     sealed class Item
     {
@@ -245,10 +245,7 @@ sealed class OverlayForm : Form
         if (!pinned)
         {
             int h = Px(40), bs = Px(30), by = (h - bs) / 2, bx = w - Px(6) - bs;
-            if (_settings.View == ViewMode.Both)
-                _items.Add(new Item { Kind = ItemKind.Title, Bounds = new(0, 0, w, h), Text = "Temperatures & usage" });
-            else
-                AddViewSwitch(Px(10), (h - Px(26)) / 2, Px(26));
+            AddViewSwitch(Px(10), (h - Px(26)) / 2, Px(26));
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(bx, by, bs, bs), Text = "", Click = HideToTray });
             bx -= bs + Px(2);
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(bx, by, bs, bs), Text = "", Click = TogglePin });
@@ -308,8 +305,7 @@ sealed class OverlayForm : Form
         else
         {
             // Unpin (and the temperature/usage toggle) float over the top-right corner and only appear on hover.
-            if (_settings.View != ViewMode.Both)
-                _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(64), Px(4), Px(28), Px(28)), Text = "\uE8AB", Click = ToggleView, HoverOnly = true });
+            _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(64), Px(4), Px(28), Px(28)), Text = "\uE8AB", Click = ToggleView, HoverOnly = true });
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(32), Px(4), Px(28), Px(28)), Text = "", Click = TogglePin, HoverOnly = true });
         }
 
@@ -331,10 +327,10 @@ sealed class OverlayForm : Form
         if (Visible) Invalidate();
     }
 
-    /// <summary>[ Temperatures | Usage ] in the header: one click switches the view.</summary>
+    /// <summary>[ Temps | Usage | Both ] in the header: one click switches the view.</summary>
     void AddViewSwitch(int x, int y, int h)
     {
-        foreach (var (mode, label) in new[] { (ViewMode.Temps, "Temperatures"), (ViewMode.Usage, "Usage") })
+        foreach (var (mode, label) in new[] { (ViewMode.Temps, "Temps"), (ViewMode.Usage, "Usage"), (ViewMode.Both, "Both") })
         {
             int sw = TextRenderer.MeasureText(label, _fSubValue, Size.Empty, TfMeasure).Width + Px(24);
             bool selected = _settings.View == mode;
@@ -350,6 +346,7 @@ sealed class OverlayForm : Form
         }
     }
 
+    /// <summary>Hover button while pinned: flips temperatures ↔ usage ("both" goes back to temperatures).</summary>
     void ToggleView() => SetView(_settings.View == ViewMode.Temps ? ViewMode.Usage : ViewMode.Temps);
 
     void SetView(ViewMode mode)
@@ -425,9 +422,6 @@ sealed class OverlayForm : Form
         {
             switch (it.Kind)
             {
-                case ItemKind.Title:
-                    TextRenderer.DrawText(g, it.Text, _fTitle, Inset(it.Bounds, Px(14), 0), TextPrimary, TfLeft);
-                    break;
                 case ItemKind.Button:
                     DrawButton(g, it);
                     break;
