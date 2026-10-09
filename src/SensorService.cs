@@ -7,7 +7,9 @@ namespace AllTemp;
 
 enum DeviceKind { Cpu, Gpu, Memory, Motherboard, Storage, Cooler, Other }
 
-sealed record SensorReading(string Id, string Name, float Value);
+/// <param name="Warm">Shown amber from this temperature.</param>
+/// <param name="Hot">Shown red from this temperature.</param>
+sealed record SensorReading(string Id, string Name, float Value, float Warm = 0, float Hot = 0);
 
 sealed record DeviceReading(
     string Id,
@@ -119,7 +121,12 @@ sealed class SensorService : IDisposable
             var primary = PickPrimary(kind, sensors);
             sensors.Remove(primary);
             sensors.Insert(0, primary); // primary first when a row is expanded
-            var labeled = sensors.ConvertAll(r => r with { Name = Label(kind, r.Name) });
+            var (diskType, diskWarning) = kind == DeviceKind.Storage ? DiskInfo(hw) : ("", null);
+            var labeled = sensors.Select((r, i) =>
+            {
+                var (warm, hot) = kind == DeviceKind.Storage ? DiskLimits(diskType, diskWarning, primary: i == 0) : Limits(kind, r.Name);
+                return r with { Name = Label(kind, r.Name), Warm = warm, Hot = hot };
+            }).ToList();
             devices.Add(new DeviceReading(
                 hw.Identifier.ToString(),
                 kind,
@@ -188,6 +195,36 @@ sealed class SensorService : IDisposable
         // The board's "CPU" input just repeats the CPU row, so prefer anything else.
         return sensors.Where(s => !s.Name.Contains("CPU", StringComparison.OrdinalIgnoreCase)).MaxBy(s => s.Value)
             ?? sensors.MaxBy(s => s.Value)!;
+    }
+
+    static (float warm, float hot) Limits(DeviceKind kind, string sensor) => kind switch
+    {
+        DeviceKind.Cpu => (70, 85),
+        DeviceKind.Gpu when sensor.Contains("Hot Spot") || sensor.Contains("Memory") || sensor.Contains("Junction") => (85, 100),
+        DeviceKind.Gpu => (75, 85),
+        DeviceKind.Memory or DeviceKind.Motherboard => (60, 80),
+        DeviceKind.Cooler => (40, 50),
+        _ => (70, 90),
+    };
+
+    /// <summary>
+    /// Most SSDs are rated for 0–70 °C and hard drives for 0–55/60 °C. NVMe drives also report their own
+    /// warning temperature (where they start throttling), which wins when it is lower.
+    /// </summary>
+    static (float warm, float hot) DiskLimits(string type, float? warning, bool primary)
+    {
+        if (type == "hdd") return (45, 55);
+        if (type != "nvme") return (55, 70);
+        if (primary) return (60, Math.Min(70, warning ?? 70)); // composite: the drive's overall reading
+        return (70, Math.Max(75, warning ?? 80));              // extra sensors are usually the controller, which runs hotter
+    }
+
+    /// <summary>Drive type from the identifier ("/nvme/2", "/ssd/0", "/hdd/1") and the NVMe warning threshold, if reported.</summary>
+    static (string type, float? warning) DiskInfo(IHardware hw)
+    {
+        var type = hw.Identifier.ToString().Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+        var w = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Temperature && s.Name == "Warning Temperature")?.Value;
+        return (type, w is > 30f and < 150f ? w : null);
     }
 
     /// <summary>Friendlier sensor names for the expanded rows.</summary>

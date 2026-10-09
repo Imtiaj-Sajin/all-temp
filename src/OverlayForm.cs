@@ -186,23 +186,7 @@ sealed class OverlayForm : Form
         UpdateTray();
     }
 
-    static (float warm, float hot) Limits(DeviceKind kind, string sensor) => kind switch
-    {
-        DeviceKind.Cpu => (70, 85),
-        DeviceKind.Gpu when sensor.Contains("Hot Spot") || sensor.Contains("Memory") || sensor.Contains("Junction") => (85, 100),
-        DeviceKind.Gpu => (75, 85),
-        DeviceKind.Storage when sensor.StartsWith("Sensor") => (75, 90), // NVMe controller sensors run hotter than the flash
-        DeviceKind.Storage => (55, 70),
-        DeviceKind.Memory or DeviceKind.Motherboard => (60, 80),
-        DeviceKind.Cooler => (40, 50),
-        _ => (70, 90),
-    };
-
-    static Color StatusColor(DeviceKind kind, SensorReading s)
-    {
-        var (warm, hot) = Limits(kind, s.Name);
-        return s.Value >= hot ? Hot : s.Value >= warm ? Warm : Good;
-    }
+    static Color StatusColor(SensorReading s) => s.Value >= s.Hot ? Hot : s.Value >= s.Warm ? Warm : Good;
 
     string Fmt(float celsius, bool unit = true)
     {
@@ -400,7 +384,7 @@ sealed class OverlayForm : Form
 
         int right = r.Right - Px(14);
         var valueRect = new Rectangle(right - Px(56), r.Top, Px(56), r.Height);
-        var color = StatusColor(d.Kind, d.Primary);
+        var color = StatusColor(d.Primary);
         int nameRight = valueRect.Left - Px(6);
         if (_settings.ShowGraphs)
         {
@@ -431,7 +415,7 @@ sealed class OverlayForm : Form
         TextRenderer.DrawText(g, s.Name, _fSub, new Rectangle(x, r.Top, right - Px(50) - x, r.Height),
             isPrimary ? TextPrimary : TextSecondary, TfLeft);
         TextRenderer.DrawText(g, Fmt(s.Value, unit: false), _fSubValue, new Rectangle(right - Px(48), r.Top, Px(48), r.Height),
-            StatusColor(it.Device.Kind, s), TfRight);
+            StatusColor(s), TfRight);
     }
 
     void DrawSparkline(Graphics g, Rectangle r, string id, Color color)
@@ -660,7 +644,7 @@ sealed class OverlayForm : Form
     {
         if (_devices is null || _devices.Count == 0) return;
         var main = _devices.FirstOrDefault(d => d.Kind == DeviceKind.Cpu) ?? _devices.MaxBy(d => d.Primary.Value)!;
-        var color = StatusColor(main.Kind, main.Primary);
+        var color = StatusColor(main.Primary);
         var number = Fmt(main.Primary.Value, unit: false).TrimEnd('°');
 
         var key = number + color.ToArgb();

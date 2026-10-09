@@ -3,7 +3,7 @@
 A small Windows overlay that shows every temperature sensor on the machine in one place (CPU package and cores, each GPU, each SSD/HDD, RAM sticks, motherboard / VRM / chipset, AIO liquid temp), and can be pinned on top of other windows like the Xbox Game Bar performance widget.
 
 - One row per device with a 60-sample sparkline; click a row to expand all of that device's sensors.
-- Green / amber / red per device type (e.g. CPU 70 / 85 °C, GPU core 75 / 85 °C, GPU hot spot 85 / 100 °C, disks 55 / 70 °C).
+- Green / amber / red per device type, e.g. CPU 70 / 85 °C, GPU core 75 / 85 °C, GPU hot spot 85 / 100 °C, NVMe 60 / 70 °C (or the drive's own warning temperature if lower; controller sensors 70 / 80), SATA SSD 55 / 70 °C, hard drive 45 / 55 °C.
 - Disks are labelled with their drive letters.
 - **Pin** (📌): always on top, header hidden, adjustable transparency; hover to get the unpin button. Optional click-through.
 - Tray icon shows the live CPU temperature; tooltip lists every device.
