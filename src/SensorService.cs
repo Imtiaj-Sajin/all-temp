@@ -50,14 +50,20 @@ sealed class SensorService : IDisposable
         set { _intervalMs = Math.Clamp(value, 250, 60_000); _wake.Set(); }
     }
 
-    public void Start()
+    /// <summary>Whether the PawnIO driver (CPU / RAM / motherboard sensors) is available. Valid once the first snapshot arrives.</summary>
+    public bool PawnIoReady { get; private set; }
+
+    /// <param name="installPawnIo">The user agreed to install the bundled driver; do it before opening the sensors.</param>
+    public void Start(bool installPawnIo)
     {
-        _thread = new Thread(Run) { IsBackground = true, Name = "SensorPoll", Priority = ThreadPriority.BelowNormal };
+        _thread = new Thread(() => Run(installPawnIo)) { IsBackground = true, Name = "SensorPoll", Priority = ThreadPriority.BelowNormal };
         _thread.Start();
     }
 
-    void Run()
+    void Run(bool installPawnIo)
     {
+        PawnIoReady = installPawnIo ? DriverSetup.InstallPawnIo() : Elevation.PawnIoInstalled;
+
         // LibreHardwareMonitor probes Intel GPUs through the Level Zero runtime (~50 MB resident) only when the
         // CPU group is enabled at Open(). Integrated Intel graphics expose no temperatures, so unless there's
         // an Arc card, open without the CPU and add it afterwards, which skips that probe.

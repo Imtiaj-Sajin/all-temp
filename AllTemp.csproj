@@ -27,4 +27,21 @@
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
   </ItemGroup>
 
+  <!-- Official signed PawnIO installer, embedded unmodified and run silently on first launch (see DriverSetup.cs). -->
+  <PropertyGroup>
+    <PawnIoVersion>2.2.0</PawnIoVersion>
+    <PawnIoSha256>1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032</PawnIoSha256>
+    <PawnIoFile>$(BaseIntermediateOutputPath)PawnIO-$(PawnIoVersion)\PawnIO_setup.exe</PawnIoFile>
+  </PropertyGroup>
+
+  <Target Name="BundlePawnIo" BeforeTargets="BeforeBuild">
+    <DownloadFile Condition="!Exists('$(PawnIoFile)')"
+                  SourceUrl="https://github.com/namazso/PawnIO.Setup/releases/download/$(PawnIoVersion)/PawnIO_setup.exe"
+                  DestinationFolder="$([System.IO.Path]::GetDirectoryName('$(PawnIoFile)'))" />
+    <VerifyFileHash File="$(PawnIoFile)" Hash="$(PawnIoSha256)" Algorithm="SHA256" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(PawnIoFile)" LogicalName="AllTemp.PawnIO_setup.exe" />
+    </ItemGroup>
+  </Target>
+
 </Project>

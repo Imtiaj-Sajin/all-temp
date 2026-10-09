@@ -14,7 +14,15 @@ A small Windows overlay that shows every temperature sensor on the machine in on
 
 - Windows 10/11 x64, [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0).
 - Runs as administrator (it asks via UAC). Disk SMART temps and all low-level sensors need it.
-- **PawnIO driver** for CPU, RAM and motherboard temps. LibreHardwareMonitor 0.9.5+ reads those through PawnIO instead of the old WinRing0 driver. GPU and disk temps work without it. AllTemp offers to install it (`winget install namazso.PawnIO`), or get it from <https://pawnio.eu>.
+
+## Sensor driver (PawnIO)
+
+CPU, RAM and motherboard sensors can only be read through a kernel driver. Like HWMonitor, CPU-Z and HWiNFO, AllTemp ships one, so nothing needs to be downloaded separately: `AllTemp.exe` includes the official, signed [PawnIO](https://pawnio.eu) installer (v2.2.0, by namazso, also used by LibreHardwareMonitor and FanControl).
+
+- On first launch AllTemp asks once whether to install it. **Yes** installs it silently and carries on. **No** is remembered, and the window and right-click menu keep an install link.
+- GPU and disk temperatures work without it.
+- Uninstall it any time from *Settings → Apps → PawnIO*.
+- The installer is embedded unmodified, as its license allows. PawnIO is GPL-2.0; source code at <https://github.com/namazso/PawnIO>. The build downloads it from the official release and checks its SHA-256 hash.
 
 ## Build
 

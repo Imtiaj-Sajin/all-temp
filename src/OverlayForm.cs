@@ -52,11 +52,10 @@ sealed class OverlayForm : Form
     readonly ContextMenuStrip _menu;
     readonly Dictionary<string, List<float>> _history = new();
     readonly List<Item> _items = [];
-    readonly bool _pawnIo = Elevation.PawnIoInstalled;
 
     IReadOnlyList<DeviceReading>? _devices; // null while LibreHardwareMonitor is still opening
     Item? _hot;
-    bool _mouseInside, _mouseDown, _started, _exiting, _firstShow = true, _toldAboutTray;
+    bool _mouseInside, _mouseDown, _started, _exiting, _firstShow = true, _toldAboutTray, _installingDriver;
     bool? _autostart;
     Point _downPos;
     string _trayKey = "";
@@ -124,8 +123,28 @@ sealed class OverlayForm : Form
         base.OnHandleCreated(e);
         Native.RoundCorners(Handle);
         ApplyPinState();
-        if (!_started) { _started = true; _sensors.Start(); }
+        if (!_started) { _started = true; Post(StartSensors); }
     }
+
+    void StartSensors()
+    {
+        bool install = false;
+        if (Elevation.IsAdmin && !Elevation.PawnIoInstalled && DriverSetup.Bundled && !_settings.DriverPromptShown)
+        {
+            _settings.DriverPromptShown = true; // ask once; the window and menu keep an install link afterwards
+            _settings.Save();
+            install = AskToInstallDriver();
+        }
+        _installingDriver = install;
+        RebuildLayout();
+        _sensors.Start(install);
+    }
+
+    bool AskToInstallDriver() => MessageBox.Show(this,
+        "AllTemp uses the free PawnIO driver (signed and open source, the same one used by LibreHardwareMonitor " +
+        "and FanControl) to read CPU, RAM and motherboard temperatures.\n\n" +
+        "GPU and disk temperatures work without it.\n\nInstall it now?",
+        "AllTemp: sensor driver", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes;
 
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
@@ -153,6 +172,7 @@ sealed class OverlayForm : Form
     void OnReadings(IReadOnlyList<DeviceReading> devices)
     {
         _devices = devices;
+        _installingDriver = false;
         foreach (var d in devices)
         {
             if (!_history.TryGetValue(d.Id, out var h)) _history[d.Id] = h = new List<float>(HistoryLength);
@@ -220,7 +240,8 @@ sealed class OverlayForm : Form
 
         if (_devices is null || _devices.Count == 0)
         {
-            var msg = _devices is null ? "Detecting sensors…" : "No temperature sensors found.";
+            var msg = _devices is not null ? "No temperature sensors found."
+                : _installingDriver ? "Installing sensor driver…" : "Detecting sensors…";
             _items.Add(new Item { Kind = ItemKind.Message, Bounds = new(0, y, w, Px(40)), Text = msg });
             y += Px(40);
         }
@@ -255,7 +276,8 @@ sealed class OverlayForm : Form
             string? notice = null;
             Action? fix = null;
             if (!Elevation.IsAdmin) notice = "Not running as administrator, so CPU, disk and RAM sensors are hidden.";
-            else if (!_pawnIo) (notice, fix) = ("CPU, RAM and motherboard temps need the free PawnIO driver. Click here to install it.", InstallPawnIo);
+            else if (_devices != null && !_sensors.PawnIoReady && DriverSetup.Bundled)
+                (notice, fix) = ("CPU, RAM and motherboard temps need the free PawnIO driver. Click here to install it.", InstallPawnIo);
             if (notice != null)
             {
                 int th = TextRenderer.MeasureText(notice, _fSub, new Size(w - Px(28), 0), TextFormatFlags.WordBreak | TextFormatFlags.NoPadding).Height;
@@ -559,36 +581,18 @@ sealed class OverlayForm : Form
         }
     }
 
+    /// <summary>Install link in the window / menu, for users who said "No" at first launch.</summary>
     void InstallPawnIo()
     {
-        var answer = MessageBox.Show(this,
-            "CPU, RAM and motherboard sensors are read through PawnIO, a free signed driver by namazso " +
-            "(the same one LibreHardwareMonitor and FanControl use).\n\n" +
-            "Install it now with winget? A console window shows the progress, and AllTemp restarts when it finishes.",
-            "Install PawnIO driver", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-        if (answer != DialogResult.Yes) return;
-
-        Process installer;
-        try
-        {
-            installer = Process.Start(new ProcessStartInfo("cmd.exe",
-                "/c winget install -e --id namazso.PawnIO --accept-package-agreements --accept-source-agreements & timeout /t 4")
-            { UseShellExecute = true })!;
-        }
-        catch
-        {
-            Process.Start(new ProcessStartInfo("https://pawnio.eu") { UseShellExecute = true });
-            return;
-        }
-
+        if (!AskToInstallDriver()) return;
         new Thread(() =>
         {
-            installer.WaitForExit();
+            bool ok = DriverSetup.InstallPawnIo();
             Post(() =>
             {
-                if (Elevation.PawnIoInstalled) Restart();
-                else if (MessageBox.Show(this, "PawnIO doesn't appear to be installed yet. Open pawnio.eu to download it manually?",
-                             "Install PawnIO driver", MessageBoxButtons.YesNo) == DialogResult.Yes)
+                if (ok) Restart(); // LibreHardwareMonitor only picks the driver up when it opens
+                else if (MessageBox.Show(this, "The PawnIO driver couldn't be installed. Open pawnio.eu to install it manually?",
+                             "AllTemp", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
                     Process.Start(new ProcessStartInfo("https://pawnio.eu") { UseShellExecute = true });
             });
         }) { IsBackground = true }.Start();
@@ -711,7 +715,7 @@ sealed class OverlayForm : Form
             if (Autostart.Set(want)) _autostart = want;
             else MessageBox.Show(this, "Couldn't update the startup task.", "AllTemp", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         });
-        var pawn = new ToolStripMenuItem("Install PawnIO driver…", null, (_, _) => InstallPawnIo()) { Visible = !_pawnIo && Elevation.IsAdmin };
+        var pawn = new ToolStripMenuItem("Install PawnIO driver…", null, (_, _) => InstallPawnIo());
         var copy = new ToolStripMenuItem("Copy readings", null, (_, _) =>
         {
             var text = ReadingsText();
@@ -728,6 +732,7 @@ sealed class OverlayForm : Form
         m.Opening += (_, _) =>
         {
             show.Text = Visible ? "Hide window" : "Show window";
+            pawn.Visible = _devices != null && Elevation.IsAdmin && !_sensors.PawnIoReady && DriverSetup.Bundled;
             pin.Checked = _settings.Pinned;
             clickThrough.Checked = _settings.ClickThrough;
             graphs.Checked = _settings.ShowGraphs;

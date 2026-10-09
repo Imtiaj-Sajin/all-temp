@@ -13,6 +13,7 @@ sealed class Settings
     public bool ShowGraphs { get; set; } = true;
     public int IntervalMs { get; set; } = 1000;
     public bool Hidden { get; set; }
+    public bool DriverPromptShown { get; set; }
     public HashSet<string> Expanded { get; set; } = [];
 
     static readonly string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AllTemp");
