@@ -11,13 +11,20 @@ enum DeviceKind { Cpu, Gpu, Memory, Motherboard, Storage, Cooler, Other }
 /// <param name="Hot">Shown red from this temperature.</param>
 sealed record SensorReading(string Id, string Name, float Value, float Warm = 0, float Hot = 0);
 
+/// <param name="Percent">Load / activity, 0–100.</param>
+/// <param name="Detail">Secondary figure: clock speed, memory used/total or transfer rate.</param>
+sealed record UsageReading(float? Percent, string Detail);
+
+/// <param name="Primary">Main temperature, or null for hardware that only reports usage (system RAM).</param>
+/// <param name="Usage">Load and related figures, or null when the hardware has none (motherboard).</param>
 sealed record DeviceReading(
     string Id,
     DeviceKind Kind,
     string Name,
     string? Detail,
-    SensorReading Primary,
-    IReadOnlyList<SensorReading> Sensors);
+    SensorReading? Primary,
+    IReadOnlyList<SensorReading> Sensors,
+    UsageReading? Usage);
 
 /// <summary>
 /// Owns the LibreHardwareMonitor <see cref="Computer"/> and polls it on a background thread.
@@ -107,17 +114,26 @@ sealed class SensorService : IDisposable
     {
         var devices = new List<DeviceReading>();
         // Some hardware (Super I/O chips, DIMMs) only activates its sensors during Update(), so poll
-        // everything for the first few rounds before skipping hardware that has no temperatures at all.
+        // everything for the first few rounds before skipping hardware with nothing to show.
         bool discovering = _polls++ < 5;
         foreach (var hw in _computer.Hardware)
         {
-            if (!discovering && !HasTempSensor(hw)) continue; // e.g. "Virtual Memory": nothing to show
+            if (hw.Identifier.ToString() == "/vram") continue; // virtual memory: page file, not RAM
+            if (!discovering && !HasUsefulSensor(hw)) continue;
             UpdateTree(hw);
             var sensors = new List<SensorReading>();
             CollectTemps(hw, sensors);
-            if (sensors.Count == 0) continue;
-
             var kind = KindOf(hw.HardwareType);
+            var usage = ReadUsage(kind, hw);
+            if (sensors.Count == 0)
+            {
+                if (usage != null)
+                    devices.Add(new DeviceReading(hw.Identifier.ToString(), kind,
+                        kind == DeviceKind.Memory ? "System memory" : CleanName(hw.Name),
+                        kind == DeviceKind.Storage ? LettersFor(hw) : null, null, [], usage));
+                continue;
+            }
+
             var primary = PickPrimary(kind, sensors);
             sensors.Remove(primary);
             sensors.Insert(0, primary); // primary first when a row is expanded
@@ -133,7 +149,8 @@ sealed class SensorService : IDisposable
                 CleanName(hw.Name),
                 kind == DeviceKind.Storage ? LettersFor(hw) : null,
                 labeled[0],
-                labeled));
+                labeled,
+                usage));
         }
 
         devices.Sort((a, b) => a.Kind != b.Kind
@@ -144,8 +161,58 @@ sealed class SensorService : IDisposable
         return devices;
     }
 
-    static bool HasTempSensor(IHardware hw) =>
-        hw.Sensors.Any(s => s.SensorType == SensorType.Temperature) || hw.SubHardware.Any(HasTempSensor);
+    static bool HasUsefulSensor(IHardware hw) =>
+        hw.Sensors.Any(s => s.SensorType is SensorType.Temperature or SensorType.Load) || hw.SubHardware.Any(HasUsefulSensor);
+
+    static UsageReading? ReadUsage(DeviceKind kind, IHardware hw)
+    {
+        float? Get(SensorType type, string name) =>
+            hw.Sensors.FirstOrDefault(s => s.SensorType == type && s.Name == name)?.Value is float v && !float.IsNaN(v) ? v : null;
+
+        switch (kind)
+        {
+            case DeviceKind.Cpu:
+            {
+                // AMD reports an average directly; Intel only per core ("CPU Core #1", "P-Core #1", …).
+                var clock = Get(SensorType.Clock, "Cores (Average)")
+                    ?? hw.Sensors.Where(s => s.SensorType == SensorType.Clock && s.Name.Contains("Core #") && s.Value > 0)
+                        .Select(s => s.Value!.Value).DefaultIfEmpty(0).Average();
+                var load = Get(SensorType.Load, "CPU Total");
+                return load is null && clock is not > 0 ? null : new(load, clock > 0 ? $"{clock / 1000:0.00} GHz" : "");
+            }
+            case DeviceKind.Gpu:
+            {
+                var used = Get(SensorType.SmallData, "GPU Memory Used") ?? Get(SensorType.SmallData, "D3D Dedicated Memory Used");
+                var total = Get(SensorType.SmallData, "GPU Memory Total");
+                var detail = used is not float u ? ""
+                    : total is float t && t > 0 ? $"{u / 1024:0.0}/{t / 1024:0.0} GB" : $"{u / 1024:0.0} GB";
+                var load = Get(SensorType.Load, "GPU Core");
+                return load is null && detail == "" ? null : new(load, detail);
+            }
+            case DeviceKind.Memory when hw.Identifier.ToString() == "/ram":
+            {
+                var used = Get(SensorType.Data, "Memory Used");
+                var free = Get(SensorType.Data, "Memory Available");
+                return new(Get(SensorType.Load, "Memory"), used is float u && free is float f ? $"{u:0.0}/{u + f:0.0} GB" : "");
+            }
+            case DeviceKind.Storage:
+            {
+                var load = Get(SensorType.Load, "Total Activity");
+                var rate = (Get(SensorType.Throughput, "Read Rate") ?? 0) + (Get(SensorType.Throughput, "Write Rate") ?? 0);
+                return load is null ? null : new(load, Rate(rate));
+            }
+            default:
+                return null;
+        }
+    }
+
+    static string Rate(float bytesPerSecond) => bytesPerSecond switch
+    {
+        >= 1024 * 1024 * 100 => $"{bytesPerSecond / (1024 * 1024):0} MB/s",
+        >= 1024 * 1024 => $"{bytesPerSecond / (1024 * 1024):0.0} MB/s",
+        >= 1024 => $"{bytesPerSecond / 1024:0} KB/s",
+        _ => "0 KB/s",
+    };
 
     static void UpdateTree(IHardware hw)
     {

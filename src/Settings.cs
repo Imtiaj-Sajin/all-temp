@@ -2,6 +2,8 @@ using System.Text.Json;
 
 namespace AllTemp;
 
+enum ViewMode { Temps, Usage, Both }
+
 sealed class Settings
 {
     public int X { get; set; } = int.MinValue;
@@ -11,6 +13,7 @@ sealed class Settings
     public int PinnedOpacity { get; set; } = 85;
     public bool ClickThrough { get; set; }
     public bool Fahrenheit { get; set; }
+    public ViewMode View { get; set; } = ViewMode.Temps;
     public bool ShowGraphs { get; set; } = true;
     public int IntervalMs { get; set; } = 1000;
     public bool Hidden { get; set; }

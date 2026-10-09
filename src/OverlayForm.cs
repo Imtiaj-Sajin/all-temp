@@ -22,14 +22,15 @@ sealed class OverlayForm : Form
     static readonly Color Good = Color.FromArgb(108, 203, 95);
     static readonly Color Warm = Color.FromArgb(247, 201, 72);
     static readonly Color Hot = Color.FromArgb(255, 95, 86);
+    static readonly Color Accent = Color.FromArgb(181, 131, 242); // usage graphs, like the Game Bar widget
 
     static readonly string IconFont =
         new InstalledFontCollection().Families.Any(f => f.Name == "Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
 
     const int HistoryLength = 60;
-    const TextFormatFlags TfLeft = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
-    const TextFormatFlags TfRight = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
-    const TextFormatFlags TfCenter = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+    const TextFormatFlags TfLeft = TextFormatFlags.NoPrefix | TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+    const TextFormatFlags TfRight = TextFormatFlags.NoPrefix | TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+    const TextFormatFlags TfCenter = TextFormatFlags.NoPrefix | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
 
     enum ItemKind { Title, Button, Device, Sensor, Notice, Message }
 
@@ -178,13 +179,36 @@ sealed class OverlayForm : Form
         _installingDriver = false;
         foreach (var d in devices)
         {
-            if (!_history.TryGetValue(d.Id, out var h)) _history[d.Id] = h = new List<float>(HistoryLength);
-            if (h.Count == HistoryLength) h.RemoveAt(0);
-            h.Add(d.Primary.Value);
+            if (d.Primary != null) Record(d.Id, d.Primary.Value);
+            if (d.Usage?.Percent is float pct) Record(UsageKey(d), pct);
         }
         RebuildLayout();
         UpdateTray();
     }
+
+    void Record(string key, float value)
+    {
+        if (!_history.TryGetValue(key, out var h)) _history[key] = h = new List<float>(HistoryLength);
+        if (h.Count == HistoryLength) h.RemoveAt(0);
+        h.Add(value);
+    }
+
+    static string UsageKey(DeviceReading d) => d.Id + "|usage";
+
+    bool ShowsTemps => _settings.View != ViewMode.Usage;
+    bool ShowsUsage => _settings.View != ViewMode.Temps;
+
+    IEnumerable<DeviceReading> VisibleDevices => (_devices ?? []).Where(d => _settings.View switch
+    {
+        ViewMode.Temps => d.Primary != null,
+        ViewMode.Usage => d.Usage != null,
+        _ => true,
+    });
+
+    static string Pct(float? p) => p is float v ? $"{v:0}%" : "";
+
+    static string UsageSummary(UsageReading? u) =>
+        u is null ? "" : string.Join(" · ", new[] { Pct(u.Percent), u.Detail }.Where(t => t != ""));
 
     static Color StatusColor(SensorReading s) => s.Value >= s.Hot ? Hot : s.Value >= s.Warm ? Warm : Good;
 
@@ -210,13 +234,18 @@ sealed class OverlayForm : Form
     void RebuildLayout()
     {
         _items.Clear();
-        int w = Px(360), y;
+        int w = Px(_settings.View switch { ViewMode.Both => 450, ViewMode.Usage => 400, _ => 360 }), y;
         bool pinned = _settings.Pinned;
 
         if (!pinned)
         {
             int h = Px(40), bs = Px(30), by = (h - bs) / 2, bx = w - Px(6) - bs;
-            _items.Add(new Item { Kind = ItemKind.Title, Bounds = new(0, 0, w, h), Text = "Temperatures" });
+            _items.Add(new Item { Kind = ItemKind.Title, Bounds = new(0, 0, w, h), Text = _settings.View switch
+            {
+                ViewMode.Usage => "Usage",
+                ViewMode.Both => "Temperatures & usage",
+                _ => "Temperatures",
+            } });
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(bx, by, bs, bs), Text = "", Click = HideToTray });
             bx -= bs + Px(2);
             _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(bx, by, bs, bs), Text = "", Click = TogglePin });
@@ -226,9 +255,10 @@ sealed class OverlayForm : Form
         }
         else y = Px(4);
 
-        if (_devices is null || _devices.Count == 0)
+        var visible = VisibleDevices.ToList();
+        if (visible.Count == 0)
         {
-            var msg = _devices is not null ? "No temperature sensors found."
+            var msg = _devices is not null ? "No sensors found."
                 : _installingDriver ? "Installing sensor driver…" : "Detecting sensors…";
             _items.Add(new Item { Kind = ItemKind.Message, Bounds = new(0, y, w, Px(40)), Text = msg });
             y += Px(40);
@@ -236,9 +266,9 @@ sealed class OverlayForm : Form
         else
         {
             bool first = true;
-            foreach (var d in _devices)
+            foreach (var d in visible)
             {
-                bool expandable = d.Sensors.Count > 1;
+                bool expandable = d.Sensors.Count > 1 && ShowsTemps;
                 _items.Add(new Item
                 {
                     Kind = ItemKind.Device,
@@ -370,7 +400,7 @@ sealed class OverlayForm : Form
         if (it == _hot) Fill(g, r, BgHover);
 
         int x = Px(8), cy = r.Top + r.Height / 2;
-        if (d.Sensors.Count > 1)
+        if (d.Sensors.Count > 1 && ShowsTemps)
         {
             var chevron = _settings.Expanded.Contains(d.Id) ? "" : "";
             TextRenderer.DrawText(g, chevron, _fChevron, new Rectangle(x, r.Top, Px(14), r.Height), TextSecondary, TfCenter);
@@ -382,14 +412,41 @@ sealed class OverlayForm : Form
         TextRenderer.DrawText(g, KindTag(d.Kind), _fTag, tagRect, TagText, TfCenter);
         x += Px(48);
 
+        // Right to left: big value (temperature, or load % in usage-only mode), usage column, sparkline, name.
+        bool usageOnly = _settings.View == ViewMode.Usage;
+        string value;
+        Color color;
+        string? usageText = null;
+        if (usageOnly)
+        {
+            value = Pct(d.Usage?.Percent);
+            color = TextPrimary;
+            usageText = d.Usage?.Detail ?? "";
+        }
+        else
+        {
+            value = d.Primary is null ? "" : Fmt(d.Primary.Value);
+            color = d.Primary is null ? TextSecondary : StatusColor(d.Primary);
+            if (ShowsUsage) usageText = UsageSummary(d.Usage);
+        }
+        // Temperature graph when there is one; otherwise (usage-only mode, or RAM in "both") the load graph.
+        bool tempGraph = !usageOnly && d.Primary != null;
+
         int right = r.Right - Px(14);
         var valueRect = new Rectangle(right - Px(56), r.Top, Px(56), r.Height);
-        var color = StatusColor(d.Primary);
         int nameRight = valueRect.Left - Px(6);
+        if (usageText != null)
+        {
+            int uw = Px(usageOnly ? 88 : 128);
+            var usageRect = new Rectangle(valueRect.Left - Px(8) - uw, r.Top, uw, r.Height);
+            TextRenderer.DrawText(g, usageText, _fSub, usageRect, usageOnly ? TextSecondary : TextPrimary, TfRight | TextFormatFlags.EndEllipsis);
+            nameRight = usageRect.Left - Px(6);
+        }
         if (_settings.ShowGraphs)
         {
-            var spark = new Rectangle(valueRect.Left - Px(58), cy - Px(9), Px(54), Px(18));
-            DrawSparkline(g, spark, d.Id, color);
+            var spark = new Rectangle(nameRight - Px(54), cy - Px(9), Px(54), Px(18));
+            if (tempGraph) DrawSparkline(g, spark, d.Id, color);
+            else DrawSparkline(g, spark, UsageKey(d), Accent, percent: true);
             nameRight = spark.Left - Px(10);
         }
 
@@ -403,7 +460,7 @@ sealed class OverlayForm : Form
             TextRenderer.DrawText(g, d.Name, _fName, new Rectangle(x, r.Top, nameRight - x, r.Height),
                 d.Detail != null ? TextSecondary : TextPrimary, TfLeft);
 
-        TextRenderer.DrawText(g, Fmt(d.Primary.Value), _fValue, valueRect, color, TfRight);
+        TextRenderer.DrawText(g, value, _fValue, valueRect, color, TfRight);
     }
 
     void DrawSensor(Graphics g, Item it)
@@ -411,18 +468,19 @@ sealed class OverlayForm : Form
         var r = it.Bounds;
         var s = it.Sensor!;
         int x = Px(72), right = r.Right - Px(14);
-        bool isPrimary = s.Id == it.Device!.Primary.Id;
+        bool isPrimary = s.Id == it.Device!.Primary?.Id;
         TextRenderer.DrawText(g, s.Name, _fSub, new Rectangle(x, r.Top, right - Px(50) - x, r.Height),
             isPrimary ? TextPrimary : TextSecondary, TfLeft);
         TextRenderer.DrawText(g, Fmt(s.Value, unit: false), _fSubValue, new Rectangle(right - Px(48), r.Top, Px(48), r.Height),
             StatusColor(s), TfRight);
     }
 
-    void DrawSparkline(Graphics g, Rectangle r, string id, Color color)
+    void DrawSparkline(Graphics g, Rectangle r, string id, Color color, bool percent = false)
     {
         if (!_history.TryGetValue(id, out var h) || h.Count < 2) return;
         float min = h.Min(), max = h.Max();
-        if (max - min < 8) { float mid = (max + min) / 2; min = mid - 4; max = mid + 4; }
+        if (percent) (min, max) = (0, 100);
+        else if (max - min < 8) { float mid = (max + min) / 2; min = mid - 4; max = mid + 4; }
         float step = r.Width / (float)(HistoryLength - 1);
         float x0 = r.Right - step * (h.Count - 1);
         var pts = new PointF[h.Count];
@@ -632,7 +690,8 @@ sealed class OverlayForm : Form
         var sb = new StringBuilder();
         foreach (var d in _devices ?? [])
         {
-            sb.AppendLine($"{KindTag(d.Kind)}  {(d.Detail != null ? d.Detail + "  " : "")}{d.Name}");
+            var usage = UsageSummary(d.Usage);
+            sb.AppendLine($"{KindTag(d.Kind)}  {(d.Detail != null ? d.Detail + "  " : "")}{d.Name}{(usage != "" ? "  (" + usage + ")" : "")}");
             foreach (var s in d.Sensors) sb.AppendLine($"    {s.Name,-28} {Fmt(s.Value)}");
         }
         return sb.ToString();
@@ -643,9 +702,21 @@ sealed class OverlayForm : Form
     void UpdateTray()
     {
         if (_devices is null || _devices.Count == 0) return;
-        var main = _devices.FirstOrDefault(d => d.Kind == DeviceKind.Cpu) ?? _devices.MaxBy(d => d.Primary.Value)!;
-        var color = StatusColor(main.Primary);
-        var number = Fmt(main.Primary.Value, unit: false).TrimEnd('°');
+        var cpu = _devices.FirstOrDefault(d => d.Kind == DeviceKind.Cpu);
+        string number;
+        Color color;
+        if (_settings.View == ViewMode.Usage && cpu?.Usage?.Percent is float load)
+        {
+            number = $"{load:0}";
+            color = TextPrimary;
+        }
+        else
+        {
+            var main = cpu?.Primary != null ? cpu : _devices.Where(d => d.Primary != null).MaxBy(d => d.Primary!.Value);
+            if (main?.Primary is null) return;
+            color = StatusColor(main.Primary);
+            number = Fmt(main.Primary.Value, unit: false).TrimEnd('°');
+        }
 
         var key = number + color.ToArgb();
         if (key != _trayKey)
@@ -661,8 +732,10 @@ sealed class OverlayForm : Form
         var lines = _devices
             .GroupBy(d => d.Kind == DeviceKind.Storage)
             .OrderBy(g => g.Key)
-            .Select(g => string.Join(" · ", g.Select(d =>
-                $"{(d.Kind == DeviceKind.Storage ? d.Detail?.Split(' ')[0] ?? "Disk" : KindTag(d.Kind))} {Fmt(d.Primary.Value, unit: false)}")));
+            .Select(g => string.Join(" · ", g.Where(d => d.Primary != null || d.Usage?.Percent != null).Select(d =>
+                $"{(d.Kind == DeviceKind.Storage ? d.Detail?.Split(' ')[0] ?? "Disk" : KindTag(d.Kind))} " +
+                (_settings.View == ViewMode.Usage || d.Primary is null ? Pct(d.Usage?.Percent) : Fmt(d.Primary.Value, unit: false)))))
+            .Where(line => line != "");
         var tip = "AllTemp";
         foreach (var line in lines)
         {
@@ -720,6 +793,16 @@ sealed class OverlayForm : Form
             RebuildLayout();
             UpdateTray();
         });
+        var view = new ToolStripMenuItem("Show");
+        foreach (var (mode, label) in new[] { (ViewMode.Temps, "Temperatures"), (ViewMode.Usage, "Usage (load, clocks, memory)"), (ViewMode.Both, "Temperatures + usage") })
+            view.DropDownItems.Add(new ToolStripMenuItem(label, null, (_, _) =>
+            {
+                _settings.View = mode;
+                _settings.Save();
+                _trayKey = "";
+                RebuildLayout();
+                UpdateTray();
+            }) { Tag = mode });
         var interval = new ToolStripMenuItem("Refresh every");
         foreach (var ms in new[] { 500, 1000, 2000, 5000 })
             interval.DropDownItems.Add(new ToolStripMenuItem(ms < 1000 ? $"{ms / 1000.0:0.#} s" : $"{ms / 1000} s", null, (_, _) =>
@@ -743,7 +826,7 @@ sealed class OverlayForm : Form
         });
 
         m.Items.AddRange(new ToolStripItem[] {
-            show, pin, opacity, clickThrough, new ToolStripSeparator(),
+            show, view, pin, opacity, clickThrough, new ToolStripSeparator(),
             expandAll, collapseAll, graphs, fahrenheit, interval, new ToolStripSeparator(),
             autostart, pawn, copy, new ToolStripSeparator(),
             new ToolStripMenuItem("Exit", null, (_, _) => ExitApp()),
@@ -760,6 +843,7 @@ sealed class OverlayForm : Form
             autostart.Checked = _autostart == true;
             autostart.Enabled = _autostart != null;
             foreach (ToolStripMenuItem i in opacity.DropDownItems) i.Checked = (int)i.Tag! == _settings.PinnedOpacity;
+            foreach (ToolStripMenuItem i in view.DropDownItems) i.Checked = (ViewMode)i.Tag! == _settings.View;
             foreach (ToolStripMenuItem i in interval.DropDownItems) i.Checked = (int)i.Tag! == _settings.IntervalMs;
         };
         return m;
