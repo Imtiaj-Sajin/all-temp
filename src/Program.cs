@@ -6,6 +6,14 @@ static class Program
     static void Main(string[] args)
     {
         // `AllTemp.exe --dump [file]` writes every detected hardware node and sensor to a text file.
+        // `AllTemp.exe --autostart on|off` (used by the installer) creates or removes the logon task and exits.
+        int autostart = Array.IndexOf(args, "--autostart");
+        if (autostart >= 0 && autostart + 1 < args.Length)
+        {
+            Environment.ExitCode = Autostart.Set(args[autostart + 1] == "on") ? 0 : 1;
+            return;
+        }
+
         int dump = Array.IndexOf(args, "--dump");
         if (dump >= 0)
         {

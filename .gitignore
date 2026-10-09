@@ -4,3 +4,5 @@ publish/
 .vs/
 *.user
 sensors.txt
+out/
+dist/

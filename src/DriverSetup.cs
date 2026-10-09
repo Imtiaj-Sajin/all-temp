@@ -13,6 +13,16 @@ static class DriverSetup
 
     public static bool Bundled => typeof(DriverSetup).Assembly.GetManifestResourceInfo(Resource) != null;
 
+    /// <summary>The user unticked the driver option in the installer, so don't ask again on first launch.</summary>
+    public static bool DeclinedInInstaller
+    {
+        get
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\AllTemp");
+            return key?.GetValue("DriverDeclined") is int v && v != 0;
+        }
+    }
+
     /// <summary>Runs the bundled installer silently. Returns true if PawnIO is installed afterwards.</summary>
     public static bool InstallPawnIo()
     {
