@@ -57,6 +57,7 @@ sealed class OverlayForm : Form
     Item? _hot;
     bool _mouseInside, _mouseDown, _started, _exiting, _firstShow = true, _toldAboutTray, _installingDriver;
     bool? _autostart;
+    long _deactivatedAt;
     Point _downPos;
     string _trayKey = "";
     Icon? _trayIcon;
@@ -188,6 +189,7 @@ sealed class OverlayForm : Form
         DeviceKind.Cpu => (70, 85),
         DeviceKind.Gpu when sensor.Contains("Hot Spot") || sensor.Contains("Memory") || sensor.Contains("Junction") => (85, 100),
         DeviceKind.Gpu => (75, 85),
+        DeviceKind.Storage when sensor.StartsWith("Sensor") => (75, 90), // NVMe controller sensors run hotter than the flash
         DeviceKind.Storage => (55, 70),
         DeviceKind.Memory or DeviceKind.Motherboard => (60, 80),
         DeviceKind.Cooler => (40, 50),
@@ -222,7 +224,7 @@ sealed class OverlayForm : Form
     void RebuildLayout()
     {
         _items.Clear();
-        int w = Px(340), y;
+        int w = Px(360), y;
         bool pinned = _settings.Pinned;
 
         if (!pinned)
@@ -293,7 +295,15 @@ sealed class OverlayForm : Form
 
         y += Px(6);
         var size = new Size(w, y);
-        if (ClientSize != size) ClientSize = size;
+        if (ClientSize != size)
+        {
+            var wa = Screen.FromRectangle(Bounds).WorkingArea;
+            bool growUp = Top + Height / 2 > wa.Top + wa.Height / 2; // near the bottom: keep the bottom edge fixed
+            int bottom = Bottom;
+            ClientSize = size;
+            if (growUp) Top = bottom - Height;
+            Top = Math.Max(wa.Top, Math.Min(Top, wa.Bottom - Height));
+        }
         _hot = _mouseInside ? HitTest(PointToClient(MousePosition)) : null;
         if (Visible) Invalidate();
     }
@@ -305,6 +315,19 @@ sealed class OverlayForm : Form
             Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(new Rectangle(p, new Size(Px(120), Px(40)))));
         var wa = Screen.PrimaryScreen!.WorkingArea;
         Location = onScreen ? p : new Point(wa.Right - Width - Px(24), wa.Top + Px(24));
+        if (onScreen && _settings.Bottom != int.MinValue)
+        {
+            var screen = Screen.FromPoint(p).WorkingArea;
+            if ((_settings.Y + _settings.Bottom) / 2 > screen.Top + screen.Height / 2) Top = _settings.Bottom - Height;
+        }
+    }
+
+    void SavePosition()
+    {
+        _settings.X = Left;
+        _settings.Y = Top;
+        _settings.Bottom = Bottom;
+        _settings.Save();
     }
 
     // ───────────────────────────── painting ─────────────────────────────
@@ -500,9 +523,7 @@ sealed class OverlayForm : Form
             _mouseDown = false;
             Native.ReleaseCapture();
             Native.SendMessage(Handle, Native.WM_NCLBUTTONDOWN, Native.HTCAPTION, IntPtr.Zero); // modal move loop
-            _settings.X = Left;
-            _settings.Y = Top;
-            _settings.Save();
+            SavePosition();
             return;
         }
         if (!_mouseInside) { _mouseInside = true; Invalidate(); }
@@ -553,9 +574,18 @@ sealed class OverlayForm : Form
         RebuildLayout();
     }
 
+    protected override void OnDeactivate(EventArgs e)
+    {
+        base.OnDeactivate(e);
+        _deactivatedAt = Environment.TickCount64;
+    }
+
     void ToggleVisible()
     {
-        if (Visible) HideToTray();
+        // Clicking the tray icon takes focus first, so "active a moment ago" means the user was looking at it.
+        bool wasInFront = TopMost || Environment.TickCount64 - _deactivatedAt < 400;
+        if (Visible && !wasInFront) ShowWindow();
+        else if (Visible) HideToTray();
         else ShowWindow();
     }
 
@@ -636,22 +666,26 @@ sealed class OverlayForm : Form
         {
             _trayKey = key;
             var old = _trayIcon;
-            _trayIcon = TrayIcon.Render(number, color);
+            _trayIcon = TrayIcon.Render(number, color, Native.TrayIconSize());
             _tray.Icon = _trayIcon;
             old?.Dispose();
         }
 
-        var tip = new StringBuilder("AllTemp");
-        foreach (var d in _devices)
+        // Tooltips are capped at 127 chars, so group compactly: "CPU 75° · GPU 77°" then "C: 53° · D: 54° …".
+        var lines = _devices
+            .GroupBy(d => d.Kind == DeviceKind.Storage)
+            .OrderBy(g => g.Key)
+            .Select(g => string.Join(" · ", g.Select(d =>
+                $"{(d.Kind == DeviceKind.Storage ? d.Detail?.Split(' ')[0] ?? "Disk" : KindTag(d.Kind))} {Fmt(d.Primary.Value, unit: false)}")));
+        var tip = "AllTemp";
+        foreach (var line in lines)
         {
-            var line = $"\n{KindTag(d.Kind)} {(d.Detail ?? Shorten(d.Name))}: {Fmt(d.Primary.Value)}";
-            if (tip.Length + line.Length > 127) break;
-            tip.Append(line);
+            var next = tip + "\n" + line;
+            if (next.Length > 127) { tip = next[..126] + "…"; break; }
+            tip = next;
         }
-        _tray.Text = tip.ToString();
+        _tray.Text = tip;
     }
-
-    static string Shorten(string name) => name.Length <= 18 ? name : name[..17] + "…";
 
     ContextMenuStrip BuildMenu()
     {
@@ -760,8 +794,8 @@ sealed class OverlayForm : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
-        if (Visible) { _settings.X = Left; _settings.Y = Top; }
-        _settings.Save();
+        if (Visible) SavePosition();
+        else _settings.Save();
         _tray.Visible = false;
         _tray.Dispose();
         _trayIcon?.Dispose();

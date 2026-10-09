@@ -6,6 +6,7 @@ sealed class Settings
 {
     public int X { get; set; } = int.MinValue;
     public int Y { get; set; } = int.MinValue;
+    public int Bottom { get; set; } = int.MinValue;
     public bool Pinned { get; set; }
     public int PinnedOpacity { get; set; } = 85;
     public bool ClickThrough { get; set; }

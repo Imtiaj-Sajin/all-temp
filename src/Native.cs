@@ -13,7 +13,11 @@ static class Native
     public const int WM_NCLBUTTONDOWN = 0xA1;
     public const int HTCAPTION = 2;
 
-    [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
+    [DllImport("user32.dll")] static extern int GetSystemMetricsForDpi(int index, uint dpi);
+    [DllImport("user32.dll")] static extern uint GetDpiForSystem();
+
+    /// <summary>Pixel size of a tray icon at the taskbar's DPI.</summary>
+    public static int TrayIconSize() => GetSystemMetricsForDpi(49 /* SM_CXSMICON */, GetDpiForSystem());
     [DllImport("user32.dll")] public static extern bool ReleaseCapture();
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern nint GetWindowLongPtr(IntPtr hWnd, int nIndex);

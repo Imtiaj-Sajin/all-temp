@@ -21,6 +21,7 @@
   <!-- Dev-only: `dotnet build -p:DevNoAdmin=true` runs without the UAC prompt (CPU/disk temps will be missing). -->
   <PropertyGroup Condition="'$(DevNoAdmin)' == 'true'">
     <ApplicationManifest />
+    <DefineConstants>$(DefineConstants);DEV_NO_ADMIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
