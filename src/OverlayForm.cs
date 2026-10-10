@@ -34,7 +34,7 @@ sealed class OverlayForm : Form
     const TextFormatFlags TfCenter = TextFormatFlags.NoPrefix | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
     const TextFormatFlags TfMeasure = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine; // no ellipsis, or text measures as "…"
 
-    enum ItemKind { Button, Segment, Device, Sensor, Notice, Message }
+    enum ItemKind { Button, Segment, Columns, Device, Sensor, Notice, Message }
 
     sealed class Item
     {
@@ -256,6 +256,12 @@ sealed class OverlayForm : Form
         }
         else y = Px(4);
 
+        if (_settings.View == ViewMode.Both && visible.Count > 0)
+        {
+            _items.Add(new Item { Kind = ItemKind.Columns, Bounds = new(0, y, w, Px(22)) });
+            y += Px(22);
+        }
+
         if (visible.Count == 0)
         {
             var msg = _devices is not null ? "No sensors found."
@@ -376,19 +382,22 @@ sealed class OverlayForm : Form
                 _usageW = Math.Max(_usageW, TextRenderer.MeasureText(UsageTemplate(d), _fSub, Size.Empty, TfMeasure).Width);
         }
         nameW = Math.Min(nameW + Px(4), Px(320));
-        int w = Px(72) + nameW
-            + (_settings.ShowGraphs ? Px(64) : 0)
-            + (ShowsUsage ? _usageW + Px(14) : Px(6))
-            + Px(56 + 14);
-        return Math.Clamp(w, Px(360), Px(960));
+        int graph = _settings.ShowGraphs ? Px(64) : 0;
+        int tempCells = graph + Px(56);
+        int usageCells = graph + _usageW + Px(8 + 48);
+        int w = Px(72) + nameW + Px(10) + _settings.View switch
+        {
+            ViewMode.Temps => tempCells + Px(14),
+            ViewMode.Usage => usageCells + Px(14),
+            _ => tempCells + Px(12) + UsagePanelWidth,
+        };
+        return Math.Clamp(w, Px(360), Px(1100));
     }
 
-    /// <summary>Widest form of a device's usage text: every digit as "8", disks at a 3-digit MB/s rate.</summary>
+    /// <summary>Widest form of a device's usage detail: every digit as "8", disks at a 3-digit MB/s rate.</summary>
     string UsageTemplate(DeviceReading d)
     {
-        var detail = d.Kind == DeviceKind.Storage ? "999.9 MB/s" : Regex.Replace(d.Usage!.Detail, @"\d", "8");
-        if (_settings.View == ViewMode.Usage) return detail;
-        return detail == "" ? "100%" : "100% · " + detail;
+        return d.Kind == DeviceKind.Storage ? "999.9 MB/s" : Regex.Replace(d.Usage!.Detail, @"\d", "8");
     }
 
     void PlaceWindow()
@@ -430,6 +439,9 @@ sealed class OverlayForm : Form
                     bool selected = it.Mode == _settings.View;
                     FillRound(g, it.Bounds, Px(5), selected ? Color.FromArgb(64, 64, 68) : it == _hot ? BgHover : Color.FromArgb(40, 40, 40));
                     TextRenderer.DrawText(g, it.Text, _fSubValue, it.Bounds, selected ? TextPrimary : TextSecondary, TfCenter);
+                    break;
+                case ItemKind.Columns:
+                    DrawColumnLabels(g, it.Bounds);
                     break;
                 case ItemKind.Device:
                     DrawDevice(g, it);
@@ -481,43 +493,17 @@ sealed class OverlayForm : Form
         TextRenderer.DrawText(g, KindTag(d.Kind), _fTag, tagRect, TagText, TfCenter);
         x += Px(48);
 
-        // Right to left: big value (temperature, or load % in usage-only mode), usage column, sparkline, name.
-        bool usageOnly = _settings.View == ViewMode.Usage;
-        string value;
-        Color color;
-        string? usageText = null;
-        if (usageOnly)
+        // Right to left: the usage panel (usage / both), the temperature panel (temps / both), then the name.
+        int nameRight = r.Right - Px(14);
+        if (_settings.View == ViewMode.Both)
         {
-            value = Pct(d.Usage?.Percent);
-            color = TextPrimary;
-            usageText = d.Usage?.Detail ?? "";
+            int split = SplitX;
+            DrawSplit(g, split, r);
+            DrawUsageCells(g, d, r, cy, r.Right - Px(14));
+            nameRight = DrawTempCells(g, d, r, cy, split - Px(12));
         }
-        else
-        {
-            value = d.Primary is null ? "" : Fmt(d.Primary.Value);
-            color = d.Primary is null ? TextSecondary : StatusColor(d.Primary);
-            if (ShowsUsage) usageText = UsageSummary(d.Usage);
-        }
-        // Temperature graph when there is one; otherwise (usage-only mode, or RAM in "both") the load graph.
-        bool tempGraph = !usageOnly && d.Primary != null;
-
-        int right = r.Right - Px(14);
-        var valueRect = new Rectangle(right - Px(56), r.Top, Px(56), r.Height);
-        int nameRight = valueRect.Left - Px(6);
-        if (usageText != null)
-        {
-            int uw = _usageW;
-            var usageRect = new Rectangle(valueRect.Left - Px(8) - uw, r.Top, uw, r.Height);
-            TextRenderer.DrawText(g, usageText, _fSub, usageRect, usageOnly ? TextSecondary : TextPrimary, TfRight | TextFormatFlags.EndEllipsis);
-            nameRight = usageRect.Left - Px(6);
-        }
-        if (_settings.ShowGraphs)
-        {
-            var spark = new Rectangle(nameRight - Px(54), cy - Px(9), Px(54), Px(18));
-            if (tempGraph) DrawSparkline(g, spark, d.Id, color);
-            else DrawSparkline(g, spark, UsageKey(d), Accent, percent: true);
-            nameRight = spark.Left - Px(10);
-        }
+        else if (ShowsUsage) nameRight = DrawUsageCells(g, d, r, cy, nameRight);
+        else nameRight = DrawTempCells(g, d, r, cy, nameRight);
 
         if (d.Detail != null)
         {
@@ -528,8 +514,62 @@ sealed class OverlayForm : Form
         if (nameRight > x)
             TextRenderer.DrawText(g, d.Name, _fName, new Rectangle(x, r.Top, nameRight - x, r.Height),
                 d.Detail != null ? TextSecondary : TextPrimary, TfLeft);
+    }
 
-        TextRenderer.DrawText(g, value, _fValue, valueRect, color, TfRight);
+    /// <summary>Temperature graph + value ending at <paramref name="right"/>; returns where the name must end.</summary>
+    int DrawTempCells(Graphics g, DeviceReading d, Rectangle r, int cy, int right)
+    {
+        var valueRect = new Rectangle(right - Px(56), r.Top, Px(56), r.Height);
+        var color = d.Primary is null ? TextSecondary : StatusColor(d.Primary);
+        if (d.Primary != null) TextRenderer.DrawText(g, Fmt(d.Primary.Value), _fValue, valueRect, color, TfRight);
+        int x = valueRect.Left;
+        if (_settings.ShowGraphs)
+        {
+            var spark = new Rectangle(x - Px(8) - Px(54), cy - Px(9), Px(54), Px(18));
+            if (d.Primary != null) DrawSparkline(g, spark, d.Id, color);
+            x = spark.Left;
+        }
+        return x - Px(10);
+    }
+
+    /// <summary>Load graph + detail (clock / memory / rate) + load % ending at <paramref name="right"/>; returns where the name must end.</summary>
+    int DrawUsageCells(Graphics g, DeviceReading d, Rectangle r, int cy, int right)
+    {
+        var pctRect = new Rectangle(right - Px(48), r.Top, Px(48), r.Height);
+        var detailRect = new Rectangle(pctRect.Left - Px(8) - _usageW, r.Top, _usageW, r.Height);
+        if (d.Usage != null)
+        {
+            TextRenderer.DrawText(g, Pct(d.Usage.Percent), _fValue, pctRect, TextPrimary, TfRight);
+            TextRenderer.DrawText(g, d.Usage.Detail, _fSub, detailRect, TextSecondary, TfRight | TextFormatFlags.EndEllipsis);
+        }
+        int x = detailRect.Left;
+        if (_settings.ShowGraphs)
+        {
+            var spark = new Rectangle(x - Px(10) - Px(54), cy - Px(9), Px(54), Px(18));
+            if (d.Usage?.Percent != null) DrawSparkline(g, spark, UsageKey(d), Accent, percent: true);
+            x = spark.Left;
+        }
+        return x - Px(10);
+    }
+
+    /// <summary>Width of the usage panel, i.e. what DrawUsageCells takes plus margins.</summary>
+    int UsagePanelWidth => Px(16) + (_settings.ShowGraphs ? Px(64) : 0) + _usageW + Px(8 + 48 + 14);
+
+    /// <summary>x of the line between the temperature and usage panels in "both".</summary>
+    int SplitX => ClientSize.Width - UsagePanelWidth;
+
+    void DrawSplit(Graphics g, int x, Rectangle r)
+    {
+        using var pen = new Pen(Divider);
+        g.DrawLine(pen, x, r.Top, x, r.Bottom);
+    }
+
+    void DrawColumnLabels(Graphics g, Rectangle r)
+    {
+        int split = SplitX;
+        DrawSplit(g, split, new Rectangle(r.X, r.Top + Px(6), r.Width, r.Height - Px(6)));
+        TextRenderer.DrawText(g, "TEMPERATURE", _fTag, new Rectangle(Px(72), r.Top, split - Px(12) - Px(72), r.Height), TextSecondary, TfRight);
+        TextRenderer.DrawText(g, "USAGE", _fTag, new Rectangle(split, r.Top, r.Right - Px(14) - split, r.Height), TextSecondary, TfRight);
     }
 
     void DrawSensor(Graphics g, Item it)
@@ -537,6 +577,11 @@ sealed class OverlayForm : Form
         var r = it.Bounds;
         var s = it.Sensor!;
         int x = Px(72), right = r.Right - Px(14);
+        if (_settings.View == ViewMode.Both)
+        {
+            DrawSplit(g, SplitX, r);
+            right = SplitX - Px(12);
+        }
         bool isPrimary = s.Id == it.Device!.Primary?.Id;
         TextRenderer.DrawText(g, s.Name, _fSub, new Rectangle(x, r.Top, right - Px(50) - x, r.Height),
             isPrimary ? TextPrimary : TextSecondary, TfLeft);
