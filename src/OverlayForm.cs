@@ -241,8 +241,9 @@ sealed class OverlayForm : Form
         var visible = VisibleDevices.ToList();
         int w = ContentWidth(visible), y;
         bool pinned = _settings.Pinned;
+        bool compact = pinned && _settings.CompactWhenPinned; // header hidden; controls appear on hover
 
-        if (!pinned)
+        if (!compact)
         {
             int h = Px(40), bs = Px(30), by = (h - bs) / 2, bx = w - Px(6) - bs;
             AddViewSwitch(Px(10), (h - Px(26)) / 2, Px(26));
@@ -302,11 +303,11 @@ sealed class OverlayForm : Form
                 y += th + Px(18);
             }
         }
-        else
+        if (compact)
         {
-            // Unpin (and the temperature/usage toggle) float over the top-right corner and only appear on hover.
-            _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(64), Px(4), Px(28), Px(28)), Text = "\uE8AB", Click = ToggleView, HoverOnly = true });
-            _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(32), Px(4), Px(28), Px(28)), Text = "", Click = TogglePin, HoverOnly = true });
+            // Unpin and the temperature/usage toggle float over the first row on hover, left of its value so it stays readable.
+            _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(138), Px(4), Px(28), Px(28)), Text = "\uE8AB", Click = ToggleView, HoverOnly = true });
+            _items.Add(new Item { Kind = ItemKind.Button, Bounds = new(w - Px(106), Px(4), Px(28), Px(28)), Text = "", Click = TogglePin, HoverOnly = true });
         }
 
         y += Px(6);
@@ -835,6 +836,13 @@ sealed class OverlayForm : Form
             ApplyPinState();
         });
 
+        var compact = new ToolStripMenuItem("Compact when pinned (hide header)", null, (_, _) =>
+        {
+            _settings.CompactWhenPinned = !_settings.CompactWhenPinned;
+            _settings.Save();
+            RebuildLayout();
+        });
+
         var expandAll = new ToolStripMenuItem("Expand all", null, (_, _) =>
         {
             foreach (var d in _devices ?? []) if (d.Sensors.Count > 1) _settings.Expanded.Add(d.Id);
@@ -887,7 +895,7 @@ sealed class OverlayForm : Form
         });
 
         m.Items.AddRange(new ToolStripItem[] {
-            show, view, pin, opacity, clickThrough, new ToolStripSeparator(),
+            show, view, pin, opacity, clickThrough, compact, new ToolStripSeparator(),
             expandAll, collapseAll, graphs, fahrenheit, interval, new ToolStripSeparator(),
             autostart, pawn, copy, new ToolStripSeparator(),
             new ToolStripMenuItem("Exit", null, (_, _) => ExitApp()),
@@ -899,6 +907,7 @@ sealed class OverlayForm : Form
             pawn.Visible = _devices != null && Elevation.IsAdmin && !_sensors.PawnIoReady && DriverSetup.Bundled;
             pin.Checked = _settings.Pinned;
             clickThrough.Checked = _settings.ClickThrough;
+            compact.Checked = _settings.CompactWhenPinned;
             graphs.Checked = _settings.ShowGraphs;
             fahrenheit.Checked = _settings.Fahrenheit;
             autostart.Checked = _autostart == true;

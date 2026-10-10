@@ -12,6 +12,7 @@ sealed class Settings
     public bool Pinned { get; set; }
     public int PinnedOpacity { get; set; } = 85;
     public bool ClickThrough { get; set; }
+    public bool CompactWhenPinned { get; set; }
     public bool Fahrenheit { get; set; }
     public ViewMode View { get; set; } = ViewMode.Temps;
     public bool ShowGraphs { get; set; } = true;
