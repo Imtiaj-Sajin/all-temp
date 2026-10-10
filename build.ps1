@@ -1,7 +1,7 @@
-# Builds the release files into .\dist:
-#   AllTemp-Setup-<version>.exe     installer: optional PawnIO driver, start with Windows, and the
+# Builds the release files into .\dist (fixed names, so releases/latest/download/<name> links never break):
+#   AllTemp-Setup.exe       installer: optional PawnIO driver, start with Windows, and the
 #                                   .NET 8 Desktop Runtime downloaded from Microsoft only if missing
-#   AllTemp-<version>-portable.exe  just the exe (needs the .NET 8 Desktop Runtime)
+#   AllTemp-portable.exe    just the exe (needs the .NET 8 Desktop Runtime)
 # -Dist picks another output folder, e.g. when a running copy still locks a file in .\dist.
 param([string]$Iscc = "", [string]$Dist = "dist")
 
@@ -24,7 +24,7 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 if ($LASTEXITCODE) { throw "dotnet publish failed" }
 
 New-Item -ItemType Directory -Force $Dist | Out-Null
-try { Copy-Item out\AllTemp.exe "$Dist\AllTemp-$version-portable.exe" -ErrorAction Stop }
+try { Copy-Item out\AllTemp.exe "$Dist\AllTemp-portable.exe" -ErrorAction Stop }
 catch { throw "Can't write to $Dist (is AllTemp running from there? exit it, or pass -Dist somewhere-else): $_" }
 
 $pawnIo = Get-ChildItem obj -Recurse -Filter PawnIO_setup.exe | Select-Object -First 1
