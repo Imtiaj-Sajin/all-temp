@@ -2,11 +2,11 @@
   <img src="docs/img/icon.png" width="96" height="96" alt="AllTemp icon">
 </p>
 
-<h1 align="center">AllTemp: CPU, GPU, SSD &amp; RAM temperature monitor for Windows</h1>
+<h1 align="center">AllTemp: free, open-source CPU, GPU, SSD &amp; RAM temperature monitor for Windows</h1>
 
 <p align="center">
   <b>Every temperature on your PC in one small, always-on-top overlay.</b><br>
-  Free and lightweight for Windows 11 and Windows 10. CPU, GPU, NVMe/SSD/HDD, RAM and motherboard temperatures, plus CPU/GPU/RAM usage, in one window you can pin over games and apps.
+  Free and open source (MIT), lightweight, for Windows 11 and Windows 10. CPU, GPU, NVMe/SSD/HDD, RAM and motherboard temperatures, plus CPU/GPU/RAM usage, in one window you can pin over games and apps.
 </p>
 
 <p align="center">
@@ -35,6 +35,7 @@ Windows has no built-in way to see your CPU temperature, SSD temperature or GPU 
 - 📊 **Usage too:** switch between **Temps | Usage | Both**: CPU load and clock speed, GPU load and VRAM, RAM used/total, disk activity and transfer rate, each with a 60-second graph.
 - 🟢🟡🔴 **Colour-coded warnings** per device type. NVMe drives use their own reported warning temperature.
 - 🔔 **Live CPU temperature in the system tray**; the tooltip lists every device.
+- 💚 **Free and open source** (MIT license): no ads, no account, no tracking. All the code is in this repo.
 - 🪶 **Lightweight:** ~40 MB RAM and ~0.2 % CPU at a 1-second refresh. A 6.6 MB installer.
 - 🌗 °C / °F, refresh rate, start with Windows, compact mode. Right-click for everything.
 
@@ -84,7 +85,7 @@ Windows only lets admin programs read disk SMART data and low-level hardware sen
 <details>
 <summary><b>How is this different from HWMonitor, HWiNFO or Core Temp?</b></summary>
 
-Those are excellent but show everything in a large table, and Core Temp shows the CPU only. AllTemp is a small overlay focused on one question, "how hot is everything right now?", with every device on one screen, pin-on-top and a live tray icon. It uses the same open-source sensor library as LibreHardwareMonitor.
+Those are excellent but show everything in a large table, and Core Temp shows the CPU only. AllTemp is free and open source, and it is a small overlay focused on one question, "how hot is everything right now?", with every device on one screen, pin-on-top and a live tray icon. It uses the same open-source sensor library as LibreHardwareMonitor.
 </details>
 
 <details>
@@ -134,4 +135,4 @@ AllTemp is [MIT licensed](LICENSE). Bundled third-party components keep their ow
 
 ---
 
-<sub>Keywords: CPU temperature monitor, GPU temperature, SSD temperature, NVMe temperature, hard drive temperature, RAM temperature, motherboard temperature, Windows 11 temperature overlay, always on top, system tray CPU temp, hardware monitor, PC temperature checker.</sub>
+<sub>Keywords: free open-source CPU temperature monitor, GPU temperature, SSD temperature, NVMe temperature, hard drive temperature, RAM temperature, motherboard temperature, Windows 11 temperature overlay, always on top, system tray CPU temp, hardware monitor, PC temperature checker.</sub>

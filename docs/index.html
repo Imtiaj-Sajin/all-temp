@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AllTemp: Free CPU, GPU &amp; SSD Temperature Monitor for Windows 11 / 10</title>
-<meta name="description" content="AllTemp shows every temperature on your Windows PC (CPU, GPU, NVMe/SSD/HDD, RAM, motherboard) in one small always-on-top overlay. Free, lightweight, with CPU/GPU/RAM usage and a live tray icon.">
-<meta name="keywords" content="CPU temperature monitor, GPU temperature, SSD temperature, NVMe temperature, hard drive temperature, Windows 11 temperature overlay, always on top, hardware monitor, PC temperature">
+<title>AllTemp: Free, Open-Source CPU, GPU &amp; SSD Temperature Monitor for Windows 11 / 10</title>
+<meta name="description" content="AllTemp shows every temperature on your Windows PC (CPU, GPU, NVMe/SSD/HDD, RAM, motherboard) in one small always-on-top overlay. Free and open source (MIT), lightweight, with CPU/GPU/RAM usage and a live tray icon.">
+<meta name="keywords" content="free open source CPU temperature monitor, CPU temperature monitor, GPU temperature, SSD temperature, NVMe temperature, hard drive temperature, Windows 11 temperature overlay, always on top, hardware monitor, PC temperature">
 <link rel="canonical" href="https://imtiaj-sajin.github.io/all-temp/">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#16161a">
@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="AllTemp">
 <meta property="og:title" content="AllTemp: every temperature on your PC in one overlay">
-<meta property="og:description" content="Free Windows app that shows CPU, GPU, SSD/HDD, RAM and motherboard temperatures in one small window you can pin on top.">
+<meta property="og:description" content="Free, open-source Windows app that shows CPU, GPU, SSD/HDD, RAM and motherboard temperatures in one small window you can pin on top.">
 <meta property="og:url" content="https://imtiaj-sajin.github.io/all-temp/">
 <meta property="og:image" content="https://imtiaj-sajin.github.io/all-temp/img/social-preview.png">
 <meta property="og:image:width" content="1280">
@@ -23,7 +23,7 @@
 <meta property="og:image:alt" content="AllTemp overlay showing CPU, GPU, motherboard and disk temperatures">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="AllTemp: every temperature on your PC in one overlay">
-<meta name="twitter:description" content="CPU, GPU, SSD/HDD, RAM and motherboard temperatures in one small always-on-top window. Free for Windows 10/11.">
+<meta name="twitter:description" content="CPU, GPU, SSD/HDD, RAM and motherboard temperatures in one small always-on-top window. Free and open source, for Windows 10/11.">
 <meta name="twitter:image" content="https://imtiaj-sajin.github.io/all-temp/img/social-preview.png">
 
 <script type="application/ld+json">
@@ -41,6 +41,8 @@
   "image": "https://imtiaj-sajin.github.io/all-temp/img/social-preview.png",
   "screenshot": "https://imtiaj-sajin.github.io/all-temp/img/temps.png",
   "author": { "@type": "Person", "name": "Imtiaj Sajin", "url": "https://github.com/Imtiaj-Sajin" },
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
 }
 </script>
@@ -137,7 +139,7 @@
     <div class="hero">
       <div>
         <h1>Every temperature on your PC, <span>in one small overlay</span></h1>
-        <p class="lead">CPU, GPU, NVMe / SSD / HDD, RAM and motherboard temperatures, plus CPU, GPU and RAM usage, in a lightweight window you can pin on top of games and apps. Free for Windows 11 and 10.</p>
+        <p class="lead">CPU, GPU, NVMe / SSD / HDD, RAM and motherboard temperatures, plus CPU, GPU and RAM usage, in a lightweight window you can pin on top of games and apps. Free and open source, for Windows 11 and 10.</p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/Imtiaj-Sajin/all-temp/releases/latest/download/AllTemp-Setup.exe">
             <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 0 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1zM5 19h14a1 1 0 1 1 0 2H5a1 1 0 1 1 0-2z"/></svg>
@@ -145,7 +147,7 @@
           </a>
           <a class="btn ghost" href="https://github.com/Imtiaj-Sajin/all-temp/releases/latest/download/AllTemp-portable.exe">Portable .exe</a>
         </div>
-        <p class="meta">Free · 6.6 MB installer · Windows 10 / 11 (64-bit) · ~40 MB RAM</p>
+        <p class="meta">Free &amp; open source (MIT) · 6.6 MB installer · Windows 10 / 11 (64-bit) · ~40 MB RAM</p>
       </div>
       <img class="shot" src="img/temps.png" width="422" height="438" fetchpriority="high"
            alt="AllTemp window showing CPU, GPU, motherboard and five SSD/HDD temperatures, colour-coded">
@@ -159,6 +161,7 @@
         <div class="card"><h3>📊 Usage too</h3><p>Switch between Temps, Usage and Both: CPU load and clock, GPU load and VRAM, RAM used, disk activity, each with a 60-second graph.</p></div>
         <div class="card"><h3>🟢 Clear warnings</h3><p>Green, amber and red limits tuned per device type. NVMe drives use their own reported warning temperature.</p></div>
         <div class="card"><h3>🔔 Tray icon</h3><p>Your CPU temperature as a live number in the system tray, with every device in the tooltip.</p></div>
+        <div class="card"><h3>💚 Free &amp; open source</h3><p>MIT licensed, with no ads, no account and no tracking. Every line of code is on <a href="https://github.com/Imtiaj-Sajin/all-temp">GitHub</a>.</p></div>
         <div class="card"><h3>🪶 Lightweight</h3><p>About 40 MB of RAM and 0.2% CPU at a one-second refresh. Starts with Windows if you want it to.</p></div>
       </div>
     </section>
@@ -193,7 +196,7 @@
   </main>
 
   <footer>
-    AllTemp by <a href="https://github.com/Imtiaj-Sajin">Imtiaj Sajin</a> ·
+    AllTemp, free and open source (MIT), by <a href="https://github.com/Imtiaj-Sajin">Imtiaj Sajin</a> ·
     <a href="https://github.com/Imtiaj-Sajin/all-temp">Source on GitHub</a> ·
     <a href="https://github.com/Imtiaj-Sajin/all-temp/releases">All releases</a> ·
     Sensors via <a href="https://github.com/LibreHardwareMonitor/LibreHardwareMonitor">LibreHardwareMonitor</a>
