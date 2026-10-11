@@ -17,6 +17,7 @@
   <a href="https://github.com/Imtiaj-Sajin/all-temp/releases/latest"><img src="https://img.shields.io/github/v/release/Imtiaj-Sajin/all-temp?label=latest" alt="Latest release"></a>
   <a href="https://github.com/Imtiaj-Sajin/all-temp/releases"><img src="https://img.shields.io/github/downloads/Imtiaj-Sajin/all-temp/total" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6" alt="Windows 10 and 11">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Imtiaj-Sajin/all-temp" alt="MIT license"></a>
   <a href="https://imtiaj-sajin.github.io/all-temp/"><img src="https://img.shields.io/badge/website-alltemp-8a63d2" alt="Website"></a>
 </p>
 
@@ -126,6 +127,10 @@ For UI work without the UAC prompt: `dotnet build -p:DevNoAdmin=true` (CPU/disk 
 | `src/DriverSetup.cs` | Silent install of the bundled PawnIO driver |
 
 Sensor access is via [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0).
+
+## License
+
+AllTemp is [MIT licensed](LICENSE). Bundled third-party components keep their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ---
 

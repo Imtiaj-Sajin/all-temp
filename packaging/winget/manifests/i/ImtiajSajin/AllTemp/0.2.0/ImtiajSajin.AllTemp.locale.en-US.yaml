@@ -8,7 +8,8 @@ PublisherSupportUrl: https://github.com/Imtiaj-Sajin/all-temp/issues
 Author: Imtiaj Sajin
 PackageName: AllTemp
 PackageUrl: https://imtiaj-sajin.github.io/all-temp/
-License: Proprietary
+License: MIT
+LicenseUrl: https://github.com/Imtiaj-Sajin/all-temp/blob/main/LICENSE
 ShortDescription: CPU, GPU, SSD/HDD, RAM and motherboard temperatures in one small always-on-top overlay.
 Description: |-
   AllTemp shows every temperature on your Windows PC in one small, dark overlay you can pin on top of games and apps:
